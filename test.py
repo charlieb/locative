@@ -186,7 +186,7 @@ class Node:
                 self.pending_tx.n2_sig, self.pending_tx.to_tx_bytes(incl_sig=False)
             )
             print("Reply OK - adding to chain")
-            self.add.append(self.pending_tx)
+            self.chain.add(self.pending_tx)
             self.pending_tx = None
             self.pending_tx_n2 = None
         except InvalidSignature:
@@ -215,7 +215,7 @@ class Node:
         self.chain.add(self.pending_tx)
         self.pending_tx = None
         self.pending_tx_n2 = None  # probably unnecessary
-        return self.last().to_reply_bytes()
+        return self.chain.last().to_reply_bytes()
 
     def make_request(self, node2_id: bytes):
         tx = Transaction()
