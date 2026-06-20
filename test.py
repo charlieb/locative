@@ -80,12 +80,34 @@ class Transaction:
         self.n2_id, self.h_n2_chain, self.n2_sig = Transaction.Rep.unpack(rep)
 
 
+class TXChain:
+    def __init__(self):
+        self.txes = []
+        self.t_n1n2 = {}
+
+    def last(self):
+        if self.txes == []:
+            return None
+        return self.txes[-1]
+
+    def last_txes_with(self, n):
+        if n not in self.t_n1n2:
+            return None
+        return self.t_n1n2[n]
+
+    def add(self, tx):
+        self.txes.append(tx)
+        n1n2 = tx.n1_id + tx.n2_id
+        if n1n2 in self.t_n1n2:
+            self.t_n1n2[n1n2].append(tx)
+
+
 class Node:
     def __init__(self, name):
         self.name = name
         self.privkey = None
         self.pubkey = None
-        self.chain = []
+        self.chain = TXChain()
         self.pending_tx = None
         self.pending_tx_n2 = None
 
@@ -164,7 +186,7 @@ class Node:
                 self.pending_tx.n2_sig, self.pending_tx.to_tx_bytes(incl_sig=False)
             )
             print("Reply OK - adding to chain")
-            self.chain.append(self.pending_tx)
+            self.add.append(self.pending_tx)
             self.pending_tx = None
             self.pending_tx_n2 = None
         except InvalidSignature:
@@ -172,9 +194,10 @@ class Node:
             return False
 
     def _make_h_my_chain(self):
-        if self.chain != []:
+        c_end = self.chain.last()
+        if c_end:
             digest = hashes.Hash(hashes.SHA256())
-            digest.update(self.chain[-1])
+            digest.update(c_end.to_tx_bytes())
             return digest.finalize()
         else:
             return b"0" * 32
@@ -189,8 +212,10 @@ class Node:
             self.pending_tx.to_tx_bytes(incl_sig=False)
         )
 
-        self.chain.append(self.pending_tx)
-        return self.chain[-1].to_reply_bytes()
+        self.chain.add(self.pending_tx)
+        self.pending_tx = None
+        self.pending_tx_n2 = None  # probably unnecessary
+        return self.last().to_reply_bytes()
 
     def make_request(self, node2_id: bytes):
         tx = Transaction()
