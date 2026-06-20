@@ -77,7 +77,7 @@ class Transaction:
         )
 
     def from_reply_bytes(self, rep):
-        self.n2_id, self.h_n2_chain, self.n2_sig = Transaction.Rep(rep)
+        self.n2_id, self.h_n2_chain, self.n2_sig = Transaction.Rep.unpack(rep)
 
 
 class Node:
@@ -86,6 +86,8 @@ class Node:
         self.privkey = None
         self.pubkey = None
         self.chain = []
+        self.pending_tx = None
+        self.pending_tx_n2 = None
 
         try:
             self.load_keys()
@@ -125,7 +127,7 @@ class Node:
     def last_tx_with(self, node_id):
         return None
 
-    def receive(self, packet: bytes):
+    def receive_request(self, packet: bytes):
         tx = Transaction()
         tx.from_request_bytes(packet)
 
@@ -146,12 +148,51 @@ class Node:
             f"Validation: hash: {'OK' if hash_ok else 'NOK'},"
             f" sig: {'OK' if sig_ok else 'NOK'}"
         )
+        if hash_ok and sig_ok:
+            self.pending_tx = tx
+        else:
+            print(tx.to_request_bytes())
+
         return hash_ok and sig_ok
 
-    def reply(self):
-        pass
+    def recieve_reply(self, reply: bytes):
+        self.pending_tx.from_reply_bytes(reply)
 
-    def make_request(self, node2_id):
+        pkey = Ed25519PublicKey.from_public_bytes(self.pending_tx_n2.public_bytes_raw())
+        try:
+            pkey.verify(
+                self.pending_tx.n2_sig, self.pending_tx.to_tx_bytes(incl_sig=False)
+            )
+            print("Reply OK - adding to chain")
+            self.chain.append(self.pending_tx)
+            self.pending_tx = None
+            self.pending_tx_n2 = None
+        except InvalidSignature:
+            print("Reply NOK")
+            return False
+
+    def _make_h_my_chain(self):
+        if self.chain != []:
+            digest = hashes.Hash(hashes.SHA256())
+            digest.update(self.chain[-1])
+            return digest.finalize()
+        else:
+            return b"0" * 32
+
+    def make_reply(self):
+        if not self.pending_tx:
+            return
+
+        self.pending_tx.n2_id = self.pubkey.public_bytes_raw()
+        self.pending_tx.h_n2_chain = self._make_h_my_chain()
+        self.pending_tx.n2_sig = self.privkey.sign(
+            self.pending_tx.to_tx_bytes(incl_sig=False)
+        )
+
+        self.chain.append(self.pending_tx)
+        return self.chain[-1].to_reply_bytes()
+
+    def make_request(self, node2_id: bytes):
         tx = Transaction()
         tx.n1_id = self.pubkey.public_bytes_raw()
 
@@ -163,12 +204,13 @@ class Node:
             digest.update(t_n1n2)
             tx.h_t_n1n2 = digest.finalize()
 
-        if self.chain != []:
-            digest = hashes.Hash(hashes.SHA256())
-            digest.update(self.chain[-1])
-            tx.h_n1_chain = digest.finalize()
+        tx.h_n1_chain = self._make_h_my_chain()
 
         tx.n1_sig = self.privkey.sign(tx.to_request_bytes(incl_sig=False))
+        self.pending_tx = tx
+        self.pending_tx_n2 = node2_id
+
+        print(tx.to_request_bytes())
         return tx.to_request_bytes()
 
 
@@ -179,4 +221,6 @@ if __name__ == "__main__":
     # The pubkey is available from the reticulum announce data
     req = node1.make_request(node2.pubkey)
     Transaction().from_request_bytes(req)
-    node2.receive(req)
+    node2.receive_request(req)
+    rep = node2.make_reply()
+    node1.recieve_reply(rep)
