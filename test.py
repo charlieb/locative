@@ -8,6 +8,76 @@ from cryptography.hazmat.primitives.serialization import (
     PrivateFormat,
 )
 from cryptography.hazmat.primitives import hashes
+from cryptography.exceptions import InvalidSignature
+
+import struct
+
+
+class Transaction:
+    Tx = struct.Struct("<32s32s32s64s32s32s64s")
+    Req = struct.Struct("<32s32s32s64s")
+    Rep = struct.Struct("<32s32s64s")
+
+    def __init__(self):
+        self.n1_id: bytes = b"\0" * 32
+        self.h_t_n1n2: bytes = b"\0" * 32
+        self.h_n1_chain: bytes = b"\0" * 32
+        self.n1_sig: bytes = b"\0" * 64
+        self.n2_id: bytes = b"\0" * 32
+        self.h_n2_chain: bytes = b"\0" * 32
+        self.n2_sig: bytes = b"\0" * 64
+
+    def __repr__(self):
+        return (
+            f"self.n1_id: {self.n1_id}\n"
+            f"self.h_t_n1n2: {self.h_t_n1n2}\n"
+            f"self.h_n1_chain: {self.h_n1_chain}\n"
+            f"self.n1_sig: {self.n1_sig}\n"
+            f"self.n2_id: {self.n2_id}\n"
+            f"self.h_n2_chain: {self.h_n2_chain}\n"
+            f"self.n2_sig: {self.n2_sig}\n"
+        )
+
+    def from_tx_bytes(self, tx):
+        (
+            self.n1_id,
+            self.h_t_n1n2,
+            self.h_n1_chain,
+            self.n1_sig,
+            self.n2_id,
+            self.h_n2_chain,
+            self.n2_sig,
+        ) = Transaction.Tx.unpack(tx)
+
+    def to_tx_bytes(self, incl_sig=True):
+        return (
+            self.n1_id
+            + self.h_t_n1n2
+            + self.h_n1_chain
+            + self.n1_sig
+            + self.n2_id
+            + self.h_n2_chain
+            + (self.n2_sig if incl_sig else b"")
+        )
+
+    def to_request_bytes(self, incl_sig=True):
+        return (
+            self.n1_id
+            + self.h_t_n1n2
+            + self.h_n1_chain
+            + (self.n1_sig if incl_sig else b"")
+        )
+
+    def to_reply_bytes(self):
+        return self.n2_id + self.h_n2_chain + self.n2_sig
+
+    def from_request_bytes(self, req):
+        self.n1_id, self.h_t_n1n2, self.h_n1_chain, self.n1_sig = (
+            Transaction.Req.unpack(req)
+        )
+
+    def from_reply_bytes(self, rep):
+        self.n2_id, self.h_n2_chain, self.n2_sig = Transaction.Rep(rep)
 
 
 class Node:
@@ -56,18 +126,21 @@ class Node:
         return None
 
     def receive(self, packet: bytes):
-        pkey_id: bytes = packet[0:32]
-        tx_hash: bytes = packet[32:64]
-        sig: bytes = packet[96:160]
+        tx = Transaction()
+        tx.from_request_bytes(packet)
 
-        txn = self.last_tx_with(pkey_id)
+        txn = self.last_tx_with(tx.n1_id)
         hash_ok = False
         if txn is None:
             hash_ok = True
         # TODO validate hash against last shared tx, or the one before
 
-        pkey = Ed25519PublicKey.from_public_bytes(pkey_id)
-        sig_ok = pkey.verify(sig, packet[0:96])
+        pkey = Ed25519PublicKey.from_public_bytes(tx.n1_id)
+        sig_ok = True
+        try:
+            pkey.verify(tx.n1_sig, tx.to_request_bytes(incl_sig=False))
+        except InvalidSignature:
+            sig_ok = False
 
         print(
             f"Validation: hash: {'OK' if hash_ok else 'NOK'},"
@@ -75,23 +148,28 @@ class Node:
         )
         return hash_ok and sig_ok
 
-    def request(self, node2_id):
-        txn2 = self.last_tx_with(node2_id)
-        if txn2 is None:
-            txn2 = b"\0" * 32
+    def reply(self):
+        pass
 
-        digest = hashes.Hash(hashes.SHA256())
-        digest.update(self.chain[-1] if self.chain != [] else b"\0" * 32)
-        h_chain_end = digest.finalize()
+    def make_request(self, node2_id):
+        tx = Transaction()
+        tx.n1_id = self.pubkey.public_bytes_raw()
 
-        body = self.pubkey.public_bytes_raw() + txn2 + h_chain_end
-        print(len(body))
-        sig_n1 = self.privkey.sign(body)
-        print(len(sig_n1))
+        t_n1n2 = self.last_tx_with(node2_id)
+        # If there isn't one, the default 32 zero bytes is
+        # correct per spec.
+        if t_n1n2 is not None:
+            digest = hashes.Hash(hashes.SHA256())
+            digest.update(t_n1n2)
+            tx.h_t_n1n2 = digest.finalize()
 
-        # print(f"Request: {body.decode('utf-8') + sig_n1.decode('utf-8')}")
-        print(f"Request: {body + sig_n1}")
-        return body + sig_n1
+        if self.chain != []:
+            digest = hashes.Hash(hashes.SHA256())
+            digest.update(self.chain[-1])
+            tx.h_n1_chain = digest.finalize()
+
+        tx.n1_sig = self.privkey.sign(tx.to_request_bytes(incl_sig=False))
+        return tx.to_request_bytes()
 
 
 if __name__ == "__main__":
@@ -99,5 +177,6 @@ if __name__ == "__main__":
     node2 = Node("Node2")
 
     # The pubkey is available from the reticulum announce data
-    req = node1.request(node2.pubkey)
+    req = node1.make_request(node2.pubkey)
+    Transaction().from_request_bytes(req)
     node2.receive(req)
