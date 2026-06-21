@@ -154,23 +154,29 @@ class Node:
     def load_chain(self):
         pass
 
-    def last_tx_with(self, node_id: bytes):
-        return None
-
     def receive_request(self, packet: bytes):
         tx = Transaction()
         tx.from_request_bytes(packet)
 
-        t_n1n2s = self.chain.txes_with(tx.n1_id)
+        t_n1n2s = self.chain.txes_with(tx.n1_id + self.pubkey.public_bytes_raw())
         hash_ok = False
         if not t_n1n2s:
             hash_ok = True
         else:
-            h_t_n1n2 = Hash.hash(SHA256(), t_n1n2s[-1])
+            print(f"RCV: Found {len(t_n1n2s)} prior transactions")
+            h_t_n1n2 = Hash.hash(SHA256(), t_n1n2s[-1].to_tx_bytes())
             hash_ok = h_t_n1n2 == tx.h_t_n1n2
+            if hash_ok:
+                print(f"RCV: Found valid prior transaction at head")
             if not hash_ok and len(t_n1n2s) >= 2:
-                h_t_n1n2 = Hash.hash(SHA256(), t_n1n2s[-2])
+                h_t_n1n2 = Hash.hash(SHA256(), t_n1n2s[-2].to_tx_bytes())
                 hash_ok = h_t_n1n2 == tx.h_t_n1n2
+                # If 2nd hash is OK, we must remove the first one
+                # but only from the n1n2 history, not the global
+                # chain
+                if hash_ok:
+                    print(f"RCV: Found valid prior transaction at head-1, popping head")
+                    t_n1n2s.pop(-1)
 
         pkey = Ed25519PublicKey.from_public_bytes(tx.n1_id)
         sig_ok = True
@@ -185,8 +191,8 @@ class Node:
         )
         if hash_ok and sig_ok:
             self.pending_tx = tx
-        else:
-            print(tx.to_request_bytes())
+        # else:
+        #    print(tx.to_request_bytes())
 
         return hash_ok and sig_ok
 
@@ -232,11 +238,12 @@ class Node:
         tx = Transaction()
         tx.n1_id = self.pubkey.public_bytes_raw()
 
-        t_n1n2 = self.last_tx_with(node2_id)
+        t_n1n2s = self.chain.txes_with(self.pubkey.public_bytes_raw() + node2_id)
         # If there isn't one, the default 32 zero bytes is
         # correct per spec.
-        if t_n1n2 is not None:
-            tx.h_t_n1n2 = Hash.hash(SHA256(), t_n1n2)
+        if t_n1n2s:
+            print(f"REQ: Found {len(t_n1n2s)} prior transactions")
+            tx.h_t_n1n2 = Hash.hash(SHA256(), t_n1n2s[-1].to_tx_bytes())
 
         tx.h_n1_chain = self._make_h_my_chain()
 
@@ -244,7 +251,7 @@ class Node:
         self.pending_tx = tx
         self.pending_tx_n2 = node2_id
 
-        print(tx.to_request_bytes())
+        # print(tx.to_request_bytes())
         return tx.to_request_bytes()
 
 
@@ -260,6 +267,8 @@ if __name__ == "__main__":
     rep = node2.make_reply()
     node1.recieve_reply(rep)
     # Node1 and Node2 now have the same chain
+    # Node1: T1
+    # Node2: T1
 
     # Node1 requests Node2 but doesn't get a reply
     req = node1.make_request(node2.pubkey.public_bytes_raw())
@@ -267,7 +276,9 @@ if __name__ == "__main__":
     node2.receive_request(req)
     rep = node2.make_reply()
     # node1.recieve_reply(rep)
-    # Node1's chain is one tx shorted than Node2's
+    # Node1's chain is one tx shorter than Node2's
+    # Node1: T1
+    # Node2: T1 - T2
 
     # Node1 requests Node2, but it's not
     # using the tx that's at the head of
@@ -282,3 +293,39 @@ if __name__ == "__main__":
     node2.receive_request(req)
     rep = node2.make_reply()
     node1.recieve_reply(rep)
+    # Node1: T1 - T3
+    # Node2: T1 - (T2) - T3 # Denoting that T2 remains in Node2's global chain
+    # but isn't part of the N1N2 subchain anymore
+
+    # Make a bit more history to mess with
+    req = node1.make_request(node2.pubkey.public_bytes_raw())
+    Transaction().from_request_bytes(req)
+    node2.receive_request(req)
+    rep = node2.make_reply()
+    node1.recieve_reply(rep)
+    # Node1: T1 - T3 - T4
+    # Node2: T1 - T3 - T4
+
+    req = node1.make_request(node2.pubkey.public_bytes_raw())
+    Transaction().from_request_bytes(req)
+    node2.receive_request(req)
+    rep = node2.make_reply()
+    node1.recieve_reply(rep)
+    # Node1: T1 - T3 - T4 - T5
+    # Node2: T1 - T3 - T4 - T5
+
+    # Remove 2 txes from Node1
+    # This will create irreconsilable differences between
+    # Node1 and Node2, any reqeusts from Node1 to Node2
+    # will fail validation
+    node1.chain.txes = node1.chain.txes[:-2]
+    n1n2_key = node1.pubkey.public_bytes_raw() + node2.pubkey.public_bytes_raw()
+    node1.chain.t_n1n2[n1n2_key] = node1.chain.t_n1n2[n1n2_key][:-2]
+    # Node1: T1 - T3
+    # Node2: T1 - T3 - T4 - T5
+    req = node1.make_request(node2.pubkey.public_bytes_raw())
+    Transaction().from_request_bytes(req)
+    node2.receive_request(req)
+    rep = node2.make_reply()
+    print(rep is None)
+    # node1.recieve_reply(rep)
