@@ -7,7 +7,7 @@ from cryptography.hazmat.primitives.serialization import (
     PublicFormat,
     PrivateFormat,
 )
-from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.hashes import Hash, SHA256
 from cryptography.exceptions import InvalidSignature
 
 import struct
@@ -37,6 +37,9 @@ class Transaction:
             f"self.h_n2_chain: {self.h_n2_chain}\n"
             f"self.n2_sig: {self.n2_sig}\n"
         )
+
+    def __eq__(self, other: Transaction):
+        return self.to_tx_bytes() == other.to_tx_bytes()
 
     def from_tx_bytes(self, tx):
         (
@@ -90,16 +93,21 @@ class TXChain:
             return None
         return self.txes[-1]
 
-    def last_txes_with(self, n):
+    def txes_with(self, n):
         if n not in self.t_n1n2:
             return None
         return self.t_n1n2[n]
 
-    def add(self, tx):
+    def add(self, tx, replace_latest=False):
         self.txes.append(tx)
         n1n2 = tx.n1_id + tx.n2_id
         if n1n2 in self.t_n1n2:
-            self.t_n1n2[n1n2].append(tx)
+            if replace_latest:
+                self.t_n1n2[n1n2][-1] = tx
+            else:
+                self.t_n1n2[n1n2].append(tx)
+        else:
+            self.t_n1n2[n1n2] = [tx]
 
 
 class Node:
@@ -146,18 +154,23 @@ class Node:
     def load_chain(self):
         pass
 
-    def last_tx_with(self, node_id):
+    def last_tx_with(self, node_id: bytes):
         return None
 
     def receive_request(self, packet: bytes):
         tx = Transaction()
         tx.from_request_bytes(packet)
 
-        txn = self.last_tx_with(tx.n1_id)
+        t_n1n2s = self.chain.txes_with(tx.n1_id)
         hash_ok = False
-        if txn is None:
+        if not t_n1n2s:
             hash_ok = True
-        # TODO validate hash against last shared tx, or the one before
+        else:
+            h_t_n1n2 = Hash.hash(SHA256(), t_n1n2s[-1])
+            hash_ok = h_t_n1n2 == tx.h_t_n1n2
+            if not hash_ok and len(t_n1n2s) >= 2:
+                h_t_n1n2 = Hash.hash(SHA256(), t_n1n2s[-2])
+                hash_ok = h_t_n1n2 == tx.h_t_n1n2
 
         pkey = Ed25519PublicKey.from_public_bytes(tx.n1_id)
         sig_ok = True
@@ -180,7 +193,7 @@ class Node:
     def recieve_reply(self, reply: bytes):
         self.pending_tx.from_reply_bytes(reply)
 
-        pkey = Ed25519PublicKey.from_public_bytes(self.pending_tx_n2.public_bytes_raw())
+        pkey = Ed25519PublicKey.from_public_bytes(self.pending_tx_n2)
         try:
             pkey.verify(
                 self.pending_tx.n2_sig, self.pending_tx.to_tx_bytes(incl_sig=False)
@@ -196,9 +209,7 @@ class Node:
     def _make_h_my_chain(self):
         c_end = self.chain.last()
         if c_end:
-            digest = hashes.Hash(hashes.SHA256())
-            digest.update(c_end.to_tx_bytes())
-            return digest.finalize()
+            return Hash.hash(SHA256(), c_end.to_tx_bytes())
         else:
             return b"0" * 32
 
@@ -225,9 +236,7 @@ class Node:
         # If there isn't one, the default 32 zero bytes is
         # correct per spec.
         if t_n1n2 is not None:
-            digest = hashes.Hash(hashes.SHA256())
-            digest.update(t_n1n2)
-            tx.h_t_n1n2 = digest.finalize()
+            tx.h_t_n1n2 = Hash.hash(SHA256(), t_n1n2)
 
         tx.h_n1_chain = self._make_h_my_chain()
 
@@ -244,7 +253,31 @@ if __name__ == "__main__":
     node2 = Node("Node2")
 
     # The pubkey is available from the reticulum announce data
-    req = node1.make_request(node2.pubkey)
+    # Node1 requests tx with Node2
+    req = node1.make_request(node2.pubkey.public_bytes_raw())
+    Transaction().from_request_bytes(req)
+    node2.receive_request(req)
+    rep = node2.make_reply()
+    node1.recieve_reply(rep)
+    # Node1 and Node2 now have the same chain
+
+    # Node1 requests Node2 but doesn't get a reply
+    req = node1.make_request(node2.pubkey.public_bytes_raw())
+    Transaction().from_request_bytes(req)
+    node2.receive_request(req)
+    rep = node2.make_reply()
+    # node1.recieve_reply(rep)
+    # Node1's chain is one tx shorted than Node2's
+
+    # Node1 requests Node2, but it's not
+    # using the tx that's at the head of
+    # Node2's N1/N2 chain (or global chain for that matter)
+    # Node2 must validate anyway and its chain
+    # N1/N2 subchain should match Node1's afterwards because it's
+    # supposed to look back 1 tx if necessary.
+    # Node2's global chain must also retain the superceded
+    # transaction even though it's a dead branch
+    req = node1.make_request(node2.pubkey.public_bytes_raw())
     Transaction().from_request_bytes(req)
     node2.receive_request(req)
     rep = node2.make_reply()
