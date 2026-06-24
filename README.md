@@ -126,3 +126,9 @@ Players will want to carefully backup their keys and chain because the same rule
 
 An Example Session
 ==================
+
+Extensions and Random Thoughts
+==============================
+
+* There's enough space in a reticulum packet for a data segment
+* This is locally time ordered event list that doesn't use a clock
