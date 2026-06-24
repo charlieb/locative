@@ -1,3 +1,8 @@
+from cryptography.hazmat.primitives.asymmetric.ed25519 import (
+    Ed25519PublicKey,
+)
+from cryptography.exceptions import InvalidSignature
+
 import struct
 
 
@@ -31,6 +36,25 @@ class Transaction:
 
     def __len__(self):
         return sum(len(getattr(self, x)) for x in self.__dict__.keys())
+
+    def validate_sigs(self):
+        return self.validate_req_sig() and self.validate_tx_sig()
+
+    def validate_req_sig(self):
+        pkey = Ed25519PublicKey.from_public_bytes(self.n1_id)
+        try:
+            pkey.verify(self.n1_sig, self.to_request_bytes(incl_sig=False))
+            return True
+        except InvalidSignature:
+            return False
+
+    def validate_tx_sig(self):
+        pkey = Ed25519PublicKey.from_public_bytes(self.n2_id)
+        try:
+            pkey.verify(self.n2_sig, self.to_tx_bytes(incl_sig=False))
+            return True
+        except InvalidSignature:
+            return False
 
     def from_tx_bytes(self, tx):
         (

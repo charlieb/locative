@@ -1,14 +1,21 @@
 from node import Node
 from transaction import Transaction
+import os
 
 import unittest
+
+
+def mk_tx_between(node1, node2):
+    req = node1.make_request(node2.pubkey.public_bytes_raw())
+    node2.receive_request(req)
+    rep = node2.make_reply()
+    node1.recieve_reply(rep)
 
 
 class TestNode(unittest.TestCase):
 
     def test_txes(self):
         node1 = Node("Node1")
-
         node2 = Node("Node2")
 
         # The pubkey is available from the reticulum announce data
@@ -54,7 +61,6 @@ class TestNode(unittest.TestCase):
 
         # Make a bit more history to mess with
         req = node1.make_request(node2.pubkey.public_bytes_raw())
-        # Transaction().from_request_bytes(req)
         node2.receive_request(req)
         rep = node2.make_reply()
         node1.recieve_reply(rep)
@@ -65,7 +71,6 @@ class TestNode(unittest.TestCase):
         self.assertEqual(node1.chain.txes[1:], node2.chain.txes[2:])
 
         req = node1.make_request(node2.pubkey.public_bytes_raw())
-        # Transaction().from_request_bytes(req)
         node2.receive_request(req)
         rep = node2.make_reply()
         node1.recieve_reply(rep)
@@ -82,11 +87,69 @@ class TestNode(unittest.TestCase):
         # Node1: T1 - T3
         # Node2: T1 - T3 - T4 - T5
         req = node1.make_request(node2.pubkey.public_bytes_raw())
-        Transaction().from_request_bytes(req)
         node2.receive_request(req)
         rep = node2.make_reply()
         self.assertIsNone(rep)
         # node1.recieve_reply(rep)
+
+    def test_txes_3_nodes(self):
+        node1 = Node("Node1")
+        node2 = Node("Node2")
+        node3 = Node("Node3")
+
+        mk_tx_between(node1, node2)
+        mk_tx_between(node1, node3)
+        mk_tx_between(node2, node3)
+        mk_tx_between(node2, node1)
+        mk_tx_between(node3, node1)
+        mk_tx_between(node1, node2)
+        mk_tx_between(node3, node3)  # this should be ignored
+
+        # >N2 requested N2, <N2 reqeusted by N2
+        # Node1 - >N2 >N3 <N2 <N3 >N2
+        # Node2 - <N1 >N3 >N1 <N1
+        # Node3 - <N1 <N2 >N1
+        n1k = node1.pubkey.public_bytes_raw()
+        n2k = node2.pubkey.public_bytes_raw()
+        n3k = node3.pubkey.public_bytes_raw()
+
+        self.assertEqual(node1.chain.txes[0].n2_id, n2k)
+        self.assertEqual(node1.chain.txes[1].n2_id, n3k)
+        self.assertEqual(node1.chain.txes[2].n1_id, n2k)
+        self.assertEqual(node1.chain.txes[3].n1_id, n3k)
+        self.assertEqual(node1.chain.txes[4].n2_id, n2k)
+
+        self.assertEqual(node2.chain.txes[0].n1_id, n1k)
+        self.assertEqual(node2.chain.txes[1].n2_id, n3k)
+        self.assertEqual(node2.chain.txes[2].n2_id, n1k)
+        self.assertEqual(node2.chain.txes[3].n1_id, n1k)
+
+        self.assertEqual(node3.chain.txes[0].n1_id, n1k)
+        self.assertEqual(node3.chain.txes[1].n1_id, n2k)
+        self.assertEqual(node3.chain.txes[2].n2_id, n1k)
+
+    def test_chain_save_load(self):
+        node1 = Node("Node1")
+        node2 = Node("Node2")
+        node3 = Node("Node3")
+
+        node1.chain.txes = []
+        node1.chain.t_n1n2 = {}
+
+        mk_tx_between(node1, node2)
+        mk_tx_between(node1, node3)
+        mk_tx_between(node2, node3)
+        mk_tx_between(node2, node1)
+        mk_tx_between(node3, node1)
+        mk_tx_between(node1, node2)
+
+        node1.save_chain()
+        n1_chain = node1.chain.txes
+        node1.load_chain()
+
+        self.assertEqual(n1_chain, node1.chain.txes)
+
+        os.remove("Node1_chain")
 
 
 if __name__ == "__main__":

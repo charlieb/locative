@@ -61,40 +61,38 @@ class Node:
         self.chain.save(f"{self.name}_chain")
 
     def receive_request(self, packet: bytes):
+        if self.pending_tx:
+            print("Received Request while waiting for a reply - ignoring request.")
+            return False
+
         tx = Transaction()
         tx.from_request_bytes(packet)
 
-        t_n1n2s = self.chain.txes_with(tx.n1_id + self.pubkey.public_bytes_raw())
+        n1n2 = tx.n1_id + self.pubkey.public_bytes_raw()
+        h_t_n1n2s = self.chain.latest_2_t_n1n2_hashes(n1n2)
         hash_ok = False
-        if not t_n1n2s:
+        if not h_t_n1n2s:
+            print("RCV: No prior transactions")
             hash_ok = True
         else:
-            print(f"RCV: Found {len(t_n1n2s)} prior transactions")
-            h_t_n1n2 = Hash.hash(SHA256(), t_n1n2s[-1].to_tx_bytes())
-            hash_ok = h_t_n1n2 == tx.h_t_n1n2
+            hash_ok = h_t_n1n2s[-1] == tx.h_t_n1n2
             if hash_ok:
-                print(f"RCV: Found valid prior transaction at head")
-            if not hash_ok and len(t_n1n2s) >= 2:
-                h_t_n1n2 = Hash.hash(SHA256(), t_n1n2s[-2].to_tx_bytes())
-                hash_ok = h_t_n1n2 == tx.h_t_n1n2
+                print("RCV: Found valid prior transaction at head")
+            if not hash_ok and len(h_t_n1n2s) == 2 and h_t_n1n2s[0] == tx.h_t_n1n2:
                 # If 2nd hash is OK, we must remove the first one
                 # but only from the n1n2 history, not the global
                 # chain
-                if hash_ok:
-                    print(f"RCV: Found valid prior transaction at head-1, popping head")
-                    t_n1n2s.pop(-1)
+                hash_ok = True
+                print("RCV: Found valid prior transaction at head-1, popping head")
+                self.chain.drop_latest_t_n1n2(n1n2)
 
-        pkey = Ed25519PublicKey.from_public_bytes(tx.n1_id)
-        sig_ok = True
-        try:
-            pkey.verify(tx.n1_sig, tx.to_request_bytes(incl_sig=False))
-        except InvalidSignature:
-            sig_ok = False
+        sig_ok = tx.validate_req_sig()
 
         print(
-            f"Validation: hash: {'OK' if hash_ok else 'NOK'},"
+            f"RCV: Validation: hash: {'OK' if hash_ok else 'NOK'},"
             f" sig: {'OK' if sig_ok else 'NOK'}"
         )
+
         if hash_ok and sig_ok:
             self.pending_tx = tx
         # else:
@@ -103,20 +101,26 @@ class Node:
         return hash_ok and sig_ok
 
     def recieve_reply(self, reply: bytes):
+        if not self.pending_tx:
+            print("REQ: Received reply for unknown request - ignoring reply")
+            return False
+
+        reply_part = Transaction()
+        reply_part.from_reply_bytes(reply)
+        if reply_part.n2_id != self.pending_tx_n2:
+            print("REQ: Received reply from wrong ID - ignoring reply")
+            return False
+
         self.pending_tx.from_reply_bytes(reply)
 
-        pkey = Ed25519PublicKey.from_public_bytes(self.pending_tx_n2)
-        try:
-            pkey.verify(
-                self.pending_tx.n2_sig, self.pending_tx.to_tx_bytes(incl_sig=False)
-            )
-            print("Reply OK - adding to chain")
+        if self.pending_tx.validate_tx_sig():
+            print("REQ: Reply OK - adding to chain")
             self.chain.add(self.pending_tx)
             self.pending_tx = None
             self.pending_tx_n2 = None
-        except InvalidSignature:
-            print("Reply NOK")
-            return False
+            return True
+        print("REQ: Reply NOK")
+        return False
 
     def _make_h_my_chain(self):
         c_end = self.chain.last()
@@ -134,7 +138,7 @@ class Node:
         self.pending_tx.n2_sig = self.privkey.sign(
             self.pending_tx.to_tx_bytes(incl_sig=False)
         )
-
+        print("RCV: Adding reply to chain")
         self.chain.add(self.pending_tx)
         self.pending_tx = None
         self.pending_tx_n2 = None  # probably unnecessary
@@ -150,6 +154,8 @@ class Node:
         if t_n1n2s:
             print(f"REQ: Found {len(t_n1n2s)} prior transactions")
             tx.h_t_n1n2 = Hash.hash(SHA256(), t_n1n2s[-1].to_tx_bytes())
+        else:
+            print("REQ: Found no prior transactions")
 
         tx.h_n1_chain = self._make_h_my_chain()
 
