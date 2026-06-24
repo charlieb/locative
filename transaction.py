@@ -35,7 +35,7 @@ class Transaction:
         return self.to_tx_bytes() == other.to_tx_bytes()
 
     def __len__(self):
-        return sum(len(getattr(self, x)) for x in self.__dict__.keys())
+        return Transaction.Tx.size
 
     def validate_sigs(self):
         return self.validate_req_sig() and self.validate_tx_sig()

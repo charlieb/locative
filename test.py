@@ -104,6 +104,9 @@ class TestNode(unittest.TestCase):
         mk_tx_between(node3, node1)
         mk_tx_between(node1, node2)
         mk_tx_between(node3, node3)  # this should be ignored
+        # Not that self requests are explicitly forbidden,
+        # rather that they are prevented by the strict ordering
+        # imposed by the request/response pairing.
 
         # >N2 requested N2, <N2 reqeusted by N2
         # Node1 - >N2 >N3 <N2 <N3 >N2

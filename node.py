@@ -35,6 +35,7 @@ class Node:
         except Exception as e:
             print(e)
             print(f"Failed to load chain for {self.name}, using default empty chain.")
+            self.chain = TXChain()
 
     def load_keys(self):
         with open(f"{self.name}_keys", "rb") as f:
@@ -127,7 +128,7 @@ class Node:
         if c_end:
             return Hash.hash(SHA256(), c_end.to_tx_bytes())
         else:
-            return b"0" * 32
+            return b"\0" * 32
 
     def make_reply(self):
         if not self.pending_tx:

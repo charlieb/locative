@@ -70,7 +70,7 @@ If that matches the one sent in N1's reqeust, that part of the transaction is co
 If it still does not match then transaction validation has failed and N2 can send a failure notification or not reply.
 
 If H-T-N1/N2 is valid then the signature is validated.
-The request message up to the start of N1-SIG is validated against the N1-ID (N1's public key) using and HMAC+SHA256 algorithm.
+The request message up to the start of N1-SIG is validated against the N1-ID (N1's Ed25519 public key).
 If the signature is valid, the request is considered validated and N2 constructs then sends its reply.
 The concatenation of request and reply is considered to be a complete transaction and is therefore added to N2's chain.
 
