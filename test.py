@@ -18,6 +18,9 @@ class TestNode(unittest.TestCase):
         node1 = Node("Node1")
         node2 = Node("Node2")
 
+        node1.chain.reset()
+        node2.chain.reset()
+
         # The pubkey is available from the reticulum announce data
         # Node1 requests tx with Node2
         req = node1.make_request(node2.pubkey.public_bytes_raw())
@@ -136,8 +139,9 @@ class TestNode(unittest.TestCase):
         node2 = Node("Node2")
         node3 = Node("Node3")
 
-        node1.chain.txes = []
-        node1.chain.t_n1n2 = {}
+        node1.chain.reset()
+        node2.chain.reset()
+        node3.chain.reset()
 
         mk_tx_between(node1, node2)
         mk_tx_between(node1, node3)
@@ -151,6 +155,7 @@ class TestNode(unittest.TestCase):
         node1.load_chain()
 
         self.assertEqual(n1_chain, node1.chain.txes)
+        self.assertTrue(node1.chain.validate(node1.pubkey.public_bytes_raw()))
 
         os.remove("Node1_chain")
 

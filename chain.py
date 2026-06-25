@@ -1,6 +1,11 @@
 from cryptography.hazmat.primitives.hashes import Hash, SHA256
 
 from transaction import Transaction
+import base64
+
+
+def to_str(h):
+    return base64.b64encode(h).decode("utf-8")
 
 
 class TXChain:
@@ -17,6 +22,10 @@ class TXChain:
         if n not in self.t_n1n2:
             return None
         return self.t_n1n2[n]
+
+    def reset(self):
+        self.txes = []
+        self.t_n1n2 = {}
 
     def add(self, tx: Transaction, replace_latest=False):
         self.txes.append(tx)
@@ -45,6 +54,7 @@ class TXChain:
         self.t_n1n2[n1n2].pop(-1)
 
     def load(self, filename):
+        self.reset()
         sz = len(Transaction())
         with open(filename, "rb") as f:
             while tx_bytes := f.read(sz):
@@ -57,5 +67,23 @@ class TXChain:
             for tx in self.txes:
                 f.write(tx.to_tx_bytes())
 
-    def validate(self):
-        pass
+    def validate(self, my_id: bytes):
+        if self.txes == []:
+            return True
+        if self.txes[0].h_t_n1n2 != b"\0" * 32:
+            return False
+
+        tx = self.txes[0]
+        last_h = Hash.hash(SHA256(), self.txes[0].to_tx_bytes())
+        print(len(self.txes))
+        for tx in self.txes[1:]:
+            print(f"Chain Last Hash: {to_str(last_h)}")
+            print(f"Chain this Hash: {to_str(tx.h_n1_chain)}")
+            print(f"Chain this Hash: {to_str(tx.h_n2_chain)}")
+            this_h = tx.h_n1_chain if my_id == tx.n1_id else tx.h_n2_chain
+            if this_h != last_h:
+                return False
+            print("Chain validate: hash ok")
+            last_h = Hash.hash(SHA256(), tx.to_tx_bytes())
+
+        return True

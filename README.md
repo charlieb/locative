@@ -49,7 +49,7 @@ The response:
 
 * N1 and N2 ID - the public key of the respective node Note: this keypair is generated specifically for the game identity and does not have a relationship to the reticulum address of any specific node.
 * H-T-N1/N2 - the hash of the previous TX between N1 and N2, that exists in N1's chain. If it does not exist it should be all zeros.
-* H-N1 or N2-Chain - the head of the respective node's global chain, that is the chain of all the nodes transactions
+* H-N1 or N2-Chain - the head of the respective node's global chain, that is the chain of all the nodes transactions. If it is the first element in the chain it should be all zeros.
 * N1-SIG - the signature using N1's key of the preceeding fields in N1's request.
 * N2-SIG - the signature using N2's key of the preceeding fields in BOTH N1's complete request and N2's reply.
 
