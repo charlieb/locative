@@ -5,13 +5,17 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import (
 from cryptography.hazmat.primitives.serialization import (
     Encoding,
     PublicFormat,
-    PrivateFormat,
 )
 from cryptography.hazmat.primitives.hashes import Hash, SHA256
-from cryptography.exceptions import InvalidSignature
 
 from chain import TXChain
 from transaction import Transaction
+
+import base64
+
+
+def to_str(h):
+    return base64.b64encode(h).decode("utf-8")
 
 
 class Node:
@@ -57,6 +61,7 @@ class Node:
 
     def load_chain(self):
         self.chain.load(f"{self.name}_chain")
+        self.chain.validate(self.pubkey.public_bytes_raw())
 
     def save_chain(self):
         self.chain.save(f"{self.name}_chain")
@@ -68,25 +73,7 @@ class Node:
 
         tx = Transaction()
         tx.from_request_bytes(packet)
-
-        n1n2 = tx.n1_id + self.pubkey.public_bytes_raw()
-        h_t_n1n2s = self.chain.latest_2_t_n1n2_hashes(n1n2)
-        hash_ok = False
-        if not h_t_n1n2s:
-            print("RCV: No prior transactions")
-            hash_ok = True
-        else:
-            hash_ok = h_t_n1n2s[-1] == tx.h_t_n1n2
-            if hash_ok:
-                print("RCV: Found valid prior transaction at head")
-            if not hash_ok and len(h_t_n1n2s) == 2 and h_t_n1n2s[0] == tx.h_t_n1n2:
-                # If 2nd hash is OK, we must remove the first one
-                # but only from the n1n2 history, not the global
-                # chain
-                hash_ok = True
-                print("RCV: Found valid prior transaction at head-1, popping head")
-                self.chain.drop_latest_t_n1n2(n1n2)
-
+        hash_ok = self.chain.validate_h_t_n1n2(self.pubkey.public_bytes_raw(), tx)
         sig_ok = tx.validate_req_sig()
 
         print(
@@ -96,8 +83,6 @@ class Node:
 
         if hash_ok and sig_ok:
             self.pending_tx = tx
-        # else:
-        #    print(tx.to_request_bytes())
 
         return hash_ok and sig_ok
 
@@ -109,7 +94,7 @@ class Node:
         reply_part = Transaction()
         reply_part.from_reply_bytes(reply)
         if reply_part.n2_id != self.pending_tx_n2:
-            print("REQ: Received reply from wrong ID - ignoring reply")
+            print("REQ: Received reply from wrong node - ignoring reply")
             return False
 
         self.pending_tx.from_reply_bytes(reply)

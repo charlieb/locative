@@ -33,8 +33,8 @@ Keys and Algorithms
 A new node will generate a new Ed25519 keypair specifically for Locative. The public key is the Locative ID for that node and the private keys is the signing key for all signatures used in this game.
 Hashes will use SHA-256.
 
-The Structure of a Transaction
-================================
+The Transaction, Structure and Purpose
+======================================
 
 The request and the reply together form a single transaction. Without both parts the transacton is incomplete. Handling dropped replies will be explained below.
 Node in the following diagram is interchanable with Player.
@@ -47,16 +47,31 @@ The request:
 The response:
 | N2-ID | H-N2-Chain | N2-SIG |
 
-* N1 and N2 ID - the public key of the respective node Note: this keypair is generated specifically for the game identity and does not have a relationship to the reticulum address of any specific node.
-* H-T-N1/N2 - the hash of the previous TX between N1 and N2, that exists in N1's chain. If it does not exist it should be all zeros.
-* H-N1 or N2-Chain - the head of the respective node's global chain, that is the chain of all the nodes transactions. If it is the first element in the chain it should be all zeros.
-* N1-SIG - the signature using N1's key of the preceeding fields in N1's request.
-* N2-SIG - the signature using N2's key of the preceeding fields in BOTH N1's complete request and N2's reply.
+* N1 and N2 ID
+ * Definition: the public key of the respective node
+ * Purpose: Identification of nodes and verificaton of identity via signature
+ * Note: this keypair is generated specifically for the game identity and does not have a relationship to the reticulum address of any specific node.
+* H-T-N1/N2
+ * Definition: the hash of the previous TX between N1 and N2, that exists in both nodes's chains.
+ * Purpose: Transaction ordering, proof of and agreement on shared historical transactions. The agreement on history also allows the detection of missed replies. 
+** Note: If there is no prior transaction it should be all zeros.
+* H-N1 or N2-Chain
+ * Definition: the head of the respective node's chain, that is the chain of all the nodes transactions. 
+ * Purpose: Used to order and cryptographically bind transactions from all sources. Makes it very hard to tamper with a node's history and very evident if such tampering is attempted.
+ * Note: If it is the first element in the chain it should be all zeros.
+* N1-SIG
+ * Definition: The signature using N1's key of the preceeding fields in N1's request.
+ * Purpose: to validate that the request comes from N1 and that the sending node posesses N1's private key
+* N2-SIG
+ * Definition: The signature using N2's key of the preceeding fields in BOTH N1's complete request and N2's reply.
+ * Purpose: to validate that the reply comes from N2 and that the sending node posesses N2's private key. Additionally to bind the request and the reply into a single atomic transaction for both sides.
 
-Note that the response does not contain the H-N1/N2 field. N2's chain should contain exactly the same record. N2's signature of the request and response is an acknowledgement of that fact. See the Transaction Validation section for more information.
 
-The complete transaction, recorded identically by both N1 and N2, is the concatenation of both request and reply:
+The complete transaction:
 | N1-ID | H-N1/N2 | H-N1-Chain | N1-SIG | N2-ID | H-N2-Chain | N2-SIG |
+
+The transaction is recorded identically by both N1 and N2. It is simply the concatenation of both request and reply. Note that the response section does not contain the H-T-N1/N2 field. N2's chain should contain exactly the same record. N2's signature of the request and response is an acknowledgement of that fact. See the Transaction Validation section for more information.
+
 
 Transaction Validation
 ======================
