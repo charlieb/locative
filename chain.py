@@ -79,7 +79,7 @@ class TXChain:
         """Called h_nX_chain because we don't need to know which
         side of the transaction we are to validate this part
         of the tx"""
-        h_nx_chain = Hash, hash(SHA256(), self.txes[-1].to_tx_bytes())
+        h_nx_chain = Hash.hash(SHA256(), self.txes[-1].to_tx_bytes())
         return h_nx_chain == (tx.h_n1_chain if my_id == tx.n1_id else tx.h_n2_chain)
 
     def load(self, filename):
@@ -130,7 +130,7 @@ class TXChain:
                 if two_back:
                     print("Chain validate: N1N2 chain validation FAIL")
                     return False
-                t_n1n2s.delete(t_n1n2)
+                t_n1n2s.remove(t_n1n2)
                 two_back = True
 
         return True
