@@ -46,11 +46,9 @@ class Node:
             self.privkey = Ed25519PrivateKey.from_private_bytes(f.read(32))
             self.pubkey = Ed25519PublicKey.from_public_bytes(f.read(32))
             # TODO validate pubkey matches privkey
-        keystr = self.pubkey.public_bytes(
-            Encoding.PEM, PublicFormat.SubjectPublicKeyInfo
-        ).decode("utf-8")
-        keystr = keystr.split("\n")[1]
-        print(f"Loaded private key and public key: \n{keystr}")
+        print(
+            f"Loaded private key and public key: \n{to_str(self.pubkey.public_bytes_raw())}"
+        )
 
     def new_keys(self):
         self.privkey = Ed25519PrivateKey.generate()
@@ -60,8 +58,7 @@ class Node:
             f.write(self.pubkey.public_bytes_raw())
 
     def load_chain(self):
-        self.chain.load(f"{self.name}_chain")
-        self.chain.validate(self.pubkey.public_bytes_raw())
+        self.chain.load(self.pubkey.public_bytes_raw(), f"{self.name}_chain")
 
     def save_chain(self):
         self.chain.save(f"{self.name}_chain")
@@ -73,7 +70,7 @@ class Node:
 
         tx = Transaction()
         tx.from_request_bytes(packet)
-        hash_ok = self.chain.validate_h_t_n1n2(self.pubkey.public_bytes_raw(), tx)
+        hash_ok = bool(self.chain.validate_h_t_n1n2(self.pubkey.public_bytes_raw(), tx))
         sig_ok = tx.validate_req_sig()
 
         print(
@@ -98,14 +95,11 @@ class Node:
             return False
 
         self.pending_tx.from_reply_bytes(reply)
-
-        if self.pending_tx.validate_tx_sig():
-            print("REQ: Reply OK - adding to chain")
-            self.chain.add(self.pending_tx)
+        print("REQ: Reply from right ID - attempt add to chain")
+        if self.chain.add(self.pubkey.public_bytes_raw(), self.pending_tx):
             self.pending_tx = None
             self.pending_tx_n2 = None
             return True
-        print("REQ: Reply NOK")
         return False
 
     def _make_h_my_chain(self):
@@ -125,7 +119,7 @@ class Node:
             self.pending_tx.to_tx_bytes(incl_sig=False)
         )
         print("RCV: Adding reply to chain")
-        self.chain.add(self.pending_tx)
+        self.chain.add(self.pubkey.public_bytes_raw(), self.pending_tx)
         self.pending_tx = None
         self.pending_tx_n2 = None  # probably unnecessary
         return self.chain.last().to_reply_bytes()

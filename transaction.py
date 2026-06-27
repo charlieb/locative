@@ -66,6 +66,7 @@ class Transaction:
             self.h_n2_chain,
             self.n2_sig,
         ) = Transaction.Tx.unpack(tx)
+        return self
 
     def to_tx_bytes(self, incl_sig=True):
         return (
