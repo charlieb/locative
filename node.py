@@ -45,7 +45,12 @@ class Node:
         with open(f"{self.name}_keys", "rb") as f:
             self.privkey = Ed25519PrivateKey.from_private_bytes(f.read(32))
             self.pubkey = Ed25519PublicKey.from_public_bytes(f.read(32))
-            # TODO validate pubkey matches privkey
+            pubkey = self.privkey.public_key()
+            if pubkey.public_bytes_raw() == self.pubkey.public_bytes_raw():
+                print(
+                    "ERROR: public key does not match private key - corrupted keypair"
+                )
+            return
         print(
             f"Loaded private key and public key: \n{to_str(self.pubkey.public_bytes_raw())}"
         )

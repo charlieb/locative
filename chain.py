@@ -81,7 +81,7 @@ class TXChain:
         if not h_t_n1n2s:
             if tx.h_t_n1n2 == b"\0" * len(tx.h_t_n1n2):
                 return -1
-            return 0
+            return 0  # Return falsy value -> FAIL
         else:
             hash_ok = h_t_n1n2s[-1] == tx.h_t_n1n2
             if hash_ok:
@@ -94,15 +94,18 @@ class TXChain:
                 # chain
                 return -2
 
-        return False
+        return 0  # Return falsy value -> FAIL
 
     def validate_h_nX_chain(self, my_id: bytes, tx: Transaction):
         """Called h_nX_chain because we don't need to know which
         side of the transaction we are to validate this part
         of the tx"""
         my_hash = tx.h_n1_chain if my_id == tx.n1_id else tx.h_n2_chain
-        if self.txes == [] and my_hash == b"\0" * len(tx.h_n1_chain):
-            return True
+        if self.txes == []:
+            if my_hash == b"\0" * len(tx.h_n1_chain):
+                return True
+            return False
+
         h_nx_chain = Hash.hash(SHA256(), self.txes[-1].to_tx_bytes())
         return h_nx_chain == my_hash
 
