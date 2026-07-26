@@ -67,7 +67,10 @@ class Locative:
             RNS.loglevel = RNS.LOG_INFO
 
     def receive_announce(self, node_id, dest_hash):
-        RNS.log(f"Got announce from Node: {RNS.prettyhexrep(node_id)}")
+        RNS.log(
+            f"Got announce from Node: {RNS.prettyhexrep(node_id)}"
+            f"from {RNS.prettyhexrep(dest_hash)}"
+        )
         # Create mapping between node_id and reticulum destination
         self.known_ids[node_id] = dest_hash
 
@@ -76,15 +79,16 @@ class Locative:
         RNS.log(f"Sent announce")
 
     def receive_packet(self, message, packet):
-        if message[0] == b"Q":  # Request
+        print(f"Packet Received: {RNS.prettyhexrep(message)}")
+        if message[0] == ord("Q"):  # Request
             RNS.log("Received request.")
             if self.node.receive_request(message[1:]):
                 self.send_reply()
             else:
                 RNS.log("BAD request")
 
-        elif message[0] == b"R":  # Reply
-            pass
+        elif message[0] == ord("R"):  # Reply
+            self.recieve_reply(message[1:])
 
     def send_request(self, node_id):
         if node_id not in self.known_ids:
@@ -94,63 +98,55 @@ class Locative:
             return
 
         dest_hash = self.known_ids[node_id]
-        if RNS.Transport.has_path(dest_hash):
+        if not RNS.Transport.has_path(dest_hash):
+            RNS.log(f"No transport path to {RNS.prettyhexrep(dest_hash)}.")
+            return
 
-            server_identity = RNS.Identity.recall(dest_hash)
-            request_destination = RNS.Destination(
-                server_identity,
-                RNS.Destination.OUT,
-                RNS.Destination.SINGLE,
-                APP_NAME,
-            )
+        server_id = RNS.Identity.recall(dest_hash)
+        dest = RNS.Destination(
+            server_id,
+            RNS.Destination.OUT,
+            RNS.Destination.SINGLE,
+            APP_NAME,
+        )
 
-            # The destination is ready, so let's create a packet.
-            # We set the destination to the request_destination
-            # that was just created, and the only data we add
-            # is a random hash.
-            echo_request = RNS.Packet(
-                request_destination, b"Q" + self.node.make_request(node_id)
-            )
-
-            # Send the packet! If the packet is successfully
-            # sent, it will return a PacketReceipt instance.
-            packet_receipt = echo_request.send()
-
-            # Tell the user that the echo request was sent
-            RNS.log(
-                f"Sent locative request to {RNS.prettyhexrep(request_destination.hash)}"
-            )
-
-    def receive_request(self):
-        pass
+        RNS.Packet(dest, b"Q" + self.node.make_request(node_id)).send()
+        RNS.log(f"Sent locative request to {RNS.prettyhexrep(dest.hash)}")
 
     def send_reply(self):
         if not self.node.pending_tx:
             return
 
-        n2_id = self.node.pending_tx.n2_id
-        if not (dest := self.known_ids.get(n2_id)):
+        node_id = self.node.pending_tx.n1_id
+        if not (dest_hash := self.known_ids.get(node_id)):
             RNS.log(
-                f"Don't know where to send reply for {RNS.prettyhexrep(n2_id)}. Need announce."
+                f"Don't know where to send reply for {RNS.prettyhexrep(node_id)}. Need announce."
             )
             return
 
-        reply = RNS.Packet(dest, b"R" + self.node.make_reply())
-        reply.send()
+        server_id = RNS.Identity.recall(dest_hash)
+        dest = RNS.Destination(
+            server_id,
+            RNS.Destination.OUT,
+            RNS.Destination.SINGLE,
+            APP_NAME,
+        )
+
+        RNS.Packet(dest, b"R" + self.node.make_reply()).send()
         RNS.log(f"Sent locative reply to {RNS.prettyhexrep(dest.hash)}")
 
-    def recieve_reply(self):
-        pass
+    def recieve_reply(self, reply):
+        self.node.recieve_reply(reply)
 
     def mainloop(self):
         while True:
-            print("[A]nnounce or [R]equest, or [X] Quit")
+            print("[A]nnounce or [R]equest, or [Q]uit")
             cmd = input()
             if cmd in ["A", "a", "ann"]:
                 self.send_announce()
-            elif cmd in ["q", "Q", "req"]:
-                self.send_request(self.known_ids[-1])
-            elif cmd in ["x", "X", "quit"]:
+            elif cmd in ["r", "R", "req"]:
+                self.send_request(list(self.known_ids.keys())[-1])
+            elif cmd in ["q", "Q", "quit"]:
                 return
             # Replying should be automatic
 

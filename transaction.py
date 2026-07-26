@@ -31,7 +31,7 @@ class Transaction:
             f"self.n2_sig: {self.n2_sig}\n"
         )
 
-    def __eq__(self, other: Transaction):
+    def __eq__(self, other):
         return self.to_tx_bytes() == other.to_tx_bytes()
 
     def __len__(self):
