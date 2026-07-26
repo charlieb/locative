@@ -30,7 +30,7 @@ class LocativeAnnounceHandler:
         if app_data:
             RNS.log(
                 "The announce contained the following app data: "
-                + app_data.decode("utf-8")
+                + RNS.prettyhexrep(app_data)
             )
         for cb in self.announce_cbs:
             cb(app_data, destination_hash)
@@ -57,7 +57,6 @@ class Locative:
             RNS.Destination.IN,
             RNS.Destination.SINGLE,
             APP_NAME,
-            RNS.hexrep(self.node.pubkey.public_bytes_raw()),
         )
         self.destination.set_proof_strategy(RNS.Destination.PROVE_ALL)
         self.destination.set_packet_callback(self.receive_packet)
@@ -73,7 +72,8 @@ class Locative:
         self.known_ids[node_id] = dest_hash
 
     def send_announce(self):
-        self.destination.announce()
+        self.destination.announce(app_data=self.node.pubkey.public_bytes_raw())
+        RNS.log(f"Sent announce")
 
     def receive_packet(self, message, packet):
         if message[0] == b"Q":  # Request
@@ -144,11 +144,14 @@ class Locative:
 
     def mainloop(self):
         while True:
+            print("[A]nnounce or [R]equest, or [X] Quit")
             cmd = input()
             if cmd in ["A", "a", "ann"]:
                 self.send_announce()
             elif cmd in ["q", "Q", "req"]:
                 self.send_request(self.known_ids[-1])
+            elif cmd in ["x", "X", "quit"]:
+                return
             # Replying should be automatic
 
 
