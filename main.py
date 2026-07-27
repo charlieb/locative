@@ -27,11 +27,6 @@ class LocativeAnnounceHandler:
     def received_announce(self, destination_hash, announced_identity, app_data):
         RNS.log("Received an announce from " + RNS.prettyhexrep(destination_hash))
 
-        if app_data:
-            RNS.log(
-                "The announce contained the following app data: "
-                + RNS.prettyhexrep(app_data)
-            )
         for cb in self.announce_cbs:
             cb(app_data, destination_hash)
 
@@ -67,10 +62,7 @@ class Locative:
             RNS.loglevel = RNS.LOG_INFO
 
     def receive_announce(self, node_id, dest_hash):
-        RNS.log(
-            f"Got announce from Node: {RNS.prettyhexrep(node_id)}"
-            f"from {RNS.prettyhexrep(dest_hash)}"
-        )
+        RNS.log(f"Got announce from Node: {to_str(node_id)}")
         # Create mapping between node_id and reticulum destination
         self.known_ids[node_id] = dest_hash
 
@@ -93,7 +85,7 @@ class Locative:
     def send_request(self, node_id):
         if node_id not in self.known_ids:
             RNS.log(
-                f"Don't know where to send request for {RNS.prettyhexrep(node_id)}. Need announce."
+                f"Don't know where to send request for {to_str(node_id)}. Need announce."
             )
             return
 
@@ -120,7 +112,7 @@ class Locative:
         node_id = self.node.pending_tx.n1_id
         if not (dest_hash := self.known_ids.get(node_id)):
             RNS.log(
-                f"Don't know where to send reply for {RNS.prettyhexrep(node_id)}. Need announce."
+                f"Don't know where to send reply for {to_str(node_id)}. Need announce."
             )
             return
 
@@ -153,9 +145,6 @@ class Locative:
 
 def main():
     node = Node("Node1")
-    # node2 = Node("Node2")
-
-    node.chain.reset()
     Locative(node).mainloop()
 
 

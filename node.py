@@ -41,12 +41,20 @@ class Node:
             print(f"Failed to load chain for {self.name}, using default empty chain.")
             self.chain = TXChain()
 
+        print(self.report())
+
+    def report(self):
+        return (
+            f"My ID: {to_str(self.pubkey.public_bytes_raw())}\n"
+            f"Chain: {len(self.chain.txes)} links\n" + self.chain.report()
+        )
+
     def load_keys(self):
         with open(f"{self.name}_keys", "rb") as f:
             self.privkey = Ed25519PrivateKey.from_private_bytes(f.read(32))
             self.pubkey = Ed25519PublicKey.from_public_bytes(f.read(32))
             pubkey = self.privkey.public_key()
-            if pubkey.public_bytes_raw() == self.pubkey.public_bytes_raw():
+            if pubkey.public_bytes_raw() != self.pubkey.public_bytes_raw():
                 print(
                     "ERROR: public key does not match private key - corrupted keypair"
                 )
@@ -69,13 +77,9 @@ class Node:
         self.chain.save(f"{self.name}_chain")
 
     def receive_request(self, packet: bytes):
-        if self.pending_tx:
-            print("Received Request while waiting for a reply - ignoring request.")
-            return False
-
         tx = Transaction()
         tx.from_request_bytes(packet)
-        hash_ok = bool(self.chain.validate_h_t_n1n2(self.pubkey.public_bytes_raw(), tx))
+        hash_ok = self.chain.validate_h_t_n1n2(self.pubkey.public_bytes_raw(), tx)
         sig_ok = tx.validate_req_sig()
 
         print(
@@ -89,10 +93,6 @@ class Node:
         return hash_ok and sig_ok
 
     def recieve_reply(self, reply: bytes):
-        if not self.pending_tx:
-            print("REQ: Received reply for unknown request - ignoring reply")
-            return False
-
         reply_part = Transaction()
         reply_part.from_reply_bytes(reply)
         if reply_part.n2_id != self.pending_tx_n2:
@@ -104,6 +104,12 @@ class Node:
         if self.chain.add(self.pubkey.public_bytes_raw(), self.pending_tx):
             self.pending_tx = None
             self.pending_tx_n2 = None
+            print("REQ: Successfully added complete transaction to chain")
+            self.save_chain()
+            print(
+                f"REQ: Chain saved: n1n2 txes:"  # {len(self.chain.t_n1n2[reply_part.n2_id])}, "
+                f"total txes: {len(self.chain.txes)}"
+            )
             return True
         return False
 
@@ -125,6 +131,14 @@ class Node:
         )
         print("RCV: Adding reply to chain")
         self.chain.add(self.pubkey.public_bytes_raw(), self.pending_tx)
+        self.save_chain()
+        print(
+            f"REQ: Chain saved: n1n2 txes: "
+            # f"{len(self.chain.t_n1n2[self.pending_tx.n1_id])}, "
+            f"N1: {to_str(self.pending_tx.n1_id)} "
+            f"total txes: {len(self.chain.txes)}"
+        )
+
         self.pending_tx = None
         self.pending_tx_n2 = None  # probably unnecessary
         return self.chain.last().to_reply_bytes()

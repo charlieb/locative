@@ -16,12 +16,25 @@ class TXChain:
     def __repr__(self):
         return "\n".join(to_str(tx.to_tx_bytes()) for tx in self.txes)
 
+    def report(self):
+        res = ""
+        for n1n2_id, txes in self.t_n1n2.items():
+            halfway = len(n1n2_id) // 2
+            res += f"{to_str(n1n2_id[:halfway])} -> {to_str(n1n2_id[halfway:])} : {len(txes)} txes\n"
+        return res
+
     def last(self):
         if self.txes == []:
             return None
         return self.txes[-1]
 
     def txes_with(self, n):
+        print("=============")
+        print(self.report())
+        halfway = len(n) // 2
+        print(f"{to_str(n[:halfway])} -> {to_str(n[halfway:])}")
+        print("=============")
+
         if n not in self.t_n1n2:
             return None
         return self.t_n1n2[n]
@@ -31,6 +44,7 @@ class TXChain:
         self.t_n1n2 = {}
 
     def add(self, my_id: bytes, tx: Transaction):
+        print(self.report())
         valid = self.validate_h_t_n1n2(my_id, tx)
         if not (valid and self.validate_h_nX_chain(my_id, tx) and tx.validate_sigs()):
             print(f"Chain Dropped {to_str(tx.n2_sig)}")
