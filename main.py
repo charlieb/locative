@@ -78,7 +78,7 @@ class Locative:
             print("Not a valid selection: did not enter a number")
             return
 
-        if 1 > id_idx or id_idx >= len(ids):
+        if 1 > id_idx or id_idx > len(ids):
             print("Not a valid selection: number not in list")
             return
 
