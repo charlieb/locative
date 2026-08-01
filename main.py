@@ -94,7 +94,6 @@ class Locative:
         RNS.log(f"Sent announce")
 
     def receive_packet(self, message, packet):
-        print(f"Packet Received: {RNS.prettyhexrep(message)}")
         if message[0] == ord("Q"):  # Request
             RNS.log("Received request.")
             if self.node.receive_request(message[1:]):
@@ -103,7 +102,7 @@ class Locative:
                 RNS.log("BAD request")
 
         elif message[0] == ord("R"):  # Reply
-            self.recieve_reply(message[1:])
+            self.receive_reply(message[1:])
 
     def send_request(self, node_id):
         if node_id not in self.known_ids:
@@ -148,7 +147,6 @@ class Locative:
         )
 
         RNS.Packet(dest, b"R" + self.node.make_reply()).send()
-        RNS.log(f"Sent locative reply to [ERROR]")
         RNS.log(f"Sent locative reply to {RNS.prettyhexrep(dest.hash)}")
 
     def receive_reply(self, reply):
