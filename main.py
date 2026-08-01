@@ -61,6 +61,9 @@ class Locative:
         if RNS.loglevel < RNS.LOG_INFO:
             RNS.loglevel = RNS.LOG_INFO
 
+    def list_transactions(self):
+        print(f"Transaction Partners:\n{self.node.chain.report()}")
+
     def receive_announce(self, node_id, dest_hash):
         RNS.log(f"Got announce from Node: {to_str(node_id)}")
         # Create mapping between node_id and reticulum destination
@@ -132,12 +135,14 @@ class Locative:
 
     def mainloop(self):
         while True:
-            print("[A]nnounce or [R]equest, or [Q]uit")
+            print("[A]nnounce or [R]equest, [L]ist or [Q]uit")
             cmd = input()
             if cmd in ["A", "a", "ann"]:
                 self.send_announce()
             elif cmd in ["r", "R", "req"]:
                 self.send_request(list(self.known_ids.keys())[-1])
+            elif cmd in ["l", "L", "list"]:
+                self.list_transactions()
             elif cmd in ["q", "Q", "quit"]:
                 return
             # Replying should be automatic
