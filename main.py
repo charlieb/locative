@@ -64,6 +64,26 @@ class Locative:
     def list_transactions(self):
         print(f"Transaction Partners:\n{self.node.chain.report()}")
 
+    def ask_id(self):
+        ids = [
+            nid
+            for nid in self.node.chain.get_known_ids()
+            if nid != self.node.pubkey.public_bytes_raw()
+        ]
+        print("\n".join(f"[{i+1}]: {to_str(nid)}" for i, nid in enumerate(ids)))
+        print("Please enter the number of the ID to send a request to.")
+        try:
+            id_idx = int(input())
+        except ValueError:
+            print("Not a valid selection: did not enter a number")
+            return
+
+        if 1 > id_idx or id_idx >= len(ids):
+            print("Not a valid selection: number not in list")
+            return
+
+        return ids[id_idx - 1]
+
     def receive_announce(self, node_id, dest_hash):
         RNS.log(f"Got announce from Node: {to_str(node_id)}")
         # Create mapping between node_id and reticulum destination
@@ -128,10 +148,11 @@ class Locative:
         )
 
         RNS.Packet(dest, b"R" + self.node.make_reply()).send()
+        RNS.log(f"Sent locative reply to [ERROR]")
         RNS.log(f"Sent locative reply to {RNS.prettyhexrep(dest.hash)}")
 
-    def recieve_reply(self, reply):
-        self.node.recieve_reply(reply)
+    def receive_reply(self, reply):
+        self.node.receive_reply(reply)
 
     def mainloop(self):
         while True:
@@ -140,7 +161,9 @@ class Locative:
             if cmd in ["A", "a", "ann"]:
                 self.send_announce()
             elif cmd in ["r", "R", "req"]:
-                self.send_request(list(self.known_ids.keys())[-1])
+                nid = self.ask_id()
+                if nid is not None:
+                    self.send_request(nid)
             elif cmd in ["l", "L", "list"]:
                 self.list_transactions()
             elif cmd in ["q", "Q", "quit"]:

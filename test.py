@@ -16,7 +16,7 @@ def mk_tx_between(node1, node2, drop_reply=False):
     node2.receive_request(req)
     rep = node2.make_reply()
     if not drop_reply:
-        node1.recieve_reply(rep)
+        node1.receive_reply(rep)
     return req + rep
 
 
@@ -45,7 +45,7 @@ class TestNode(unittest.TestCase):
         req = node1.make_request(node2.pubkey.public_bytes_raw())
         node2.receive_request(req)
         rep = node2.make_reply()
-        node1.recieve_reply(rep)
+        node1.receive_reply(rep)
         # Node1 and Node2 now have the same chain
         # Node1: T1
         # Node2: T1
@@ -59,7 +59,7 @@ class TestNode(unittest.TestCase):
         req = node1.make_request(node2.pubkey.public_bytes_raw())
         node2.receive_request(req)
         rep = node2.make_reply()
-        # node1.recieve_reply(rep)
+        # node1.receive_reply(rep)
         # Node1's chain is one tx shorter than Node2's
         # Node1: T1
         # Node2: T1 - T2
@@ -80,7 +80,7 @@ class TestNode(unittest.TestCase):
         req = node1.make_request(node2.pubkey.public_bytes_raw())
         node2.receive_request(req)
         rep = node2.make_reply()
-        node1.recieve_reply(rep)
+        node1.receive_reply(rep)
         # Node1: T1 - T3
         # Node2: T1 - (T2) - T3 # Denoting that T2 remains in Node2's global chain
         # but isn't part of the N1N2 subchain anymore
@@ -95,7 +95,7 @@ class TestNode(unittest.TestCase):
         req = node1.make_request(node2.pubkey.public_bytes_raw())
         node2.receive_request(req)
         rep = node2.make_reply()
-        node1.recieve_reply(rep)
+        node1.receive_reply(rep)
         # Node1: T1 - T3 - T4
         # Node2: T1 - (T2) - T3 - T4
         # print(len(node1.chain.txes), len(node2.chain.txes))
@@ -108,7 +108,7 @@ class TestNode(unittest.TestCase):
         req = node1.make_request(node2.pubkey.public_bytes_raw())
         node2.receive_request(req)
         rep = node2.make_reply()
-        node1.recieve_reply(rep)
+        node1.receive_reply(rep)
         # Node1: T1 - T3 - T4 - T5
         # Node2: T1 - (T2) - T3 - T4 - T5
 
@@ -128,7 +128,7 @@ class TestNode(unittest.TestCase):
         # print(len(node1.chain.t_n1n2[n1n2_id]), len(node2.chain.t_n1n2[n1n2_id]))
         # print(node1.chain, "\n----------\n", node2.chain, "\n============\n")
         self.assertIsNone(rep)
-        # node1.recieve_reply(rep)
+        # node1.receive_reply(rep)
 
     def test_txes_3_nodes(self):
         node1 = Node("Node1")

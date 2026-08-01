@@ -92,7 +92,7 @@ class Node:
 
         return hash_ok and sig_ok
 
-    def recieve_reply(self, reply: bytes):
+    def receive_reply(self, reply: bytes):
         reply_part = Transaction()
         reply_part.from_reply_bytes(reply)
         if reply_part.n2_id != self.pending_tx_n2:

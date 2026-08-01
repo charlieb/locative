@@ -16,6 +16,14 @@ class TXChain:
     def __repr__(self):
         return "\n".join(to_str(tx.to_tx_bytes()) for tx in self.txes)
 
+    def get_known_ids(self):
+        ids = set()
+        for n1n2_id, txes in self.t_n1n2.items():
+            halfway = len(n1n2_id) // 2
+            ids.add(n1n2_id[:halfway])
+            ids.add(n1n2_id[halfway:])
+        return ids
+
     def report(self):
         res = ""
         for n1n2_id, txes in self.t_n1n2.items():
