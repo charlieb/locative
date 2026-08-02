@@ -1,9 +1,10 @@
 import argparse
-import sys
 import RNS
 
 from node import Node
-from transaction import Transaction
+
+from threading import Thread, Event
+from time import sleep
 
 import base64
 
@@ -32,7 +33,7 @@ class LocativeAnnounceHandler:
 
 
 class Locative:
-    def __init__(self, node):
+    def __init__(self, node, announce_interval=0):
         self.node = node
         self.known_ids = {}
 
@@ -152,7 +153,29 @@ class Locative:
     def receive_reply(self, reply):
         self.node.receive_reply(reply)
 
-    def mainloop(self):
+    def announce_loop(self, announce_interval, die):
+        while True:
+            self.send_announce()
+            total_sleep = 0
+            sleep_wait = 1 + (announce_interval % 1.0) / announce_interval
+            while total_sleep <= announce_interval:
+                sleep(sleep_wait)
+                total_sleep += sleep_wait
+                if die.is_set():
+                    return
+
+    def mainloop(self, announce_interval=0, server=False):
+        die = Event()
+        die.clear()
+        if announce_interval:
+            announce_thread = Thread(
+                target=self.announce_loop, args=[announce_interval * 60.0, die]
+            )
+            announce_thread.start()
+
+        if server:
+            return
+
         while True:
             print("[A]nnounce or [R]equest, [L]ist or [Q]uit")
             cmd = input()
@@ -164,14 +187,45 @@ class Locative:
                     self.send_request(nid)
             elif cmd in ["l", "L", "list"]:
                 self.list_transactions()
-            elif cmd in ["q", "Q", "quit"]:
+
+            if cmd in ["q", "Q", "quit"]:
+                die.set()
                 return
-            # Replying should be automatic
 
 
 def main():
-    node = Node("Node1")
-    Locative(node).mainloop()
+    parser = argparse.ArgumentParser(
+        prog="locative", description="Ingress-like for Reticulum"
+    )
+
+    parser.add_argument(
+        "-n", "--name", help="The internal name of the node", default="Node"
+    )
+    parser.add_argument(
+        "-s",
+        "--server",
+        help=(
+            "Start in server only mode, no user interaction,"
+            " default announce interval 15 minutes."
+        ),
+        default=False,
+        type=bool,
+    )
+    parser.add_argument(
+        "-a",
+        "--announce-interval",
+        help="Announce interval in minutes. Default manual only",
+        default=0,
+        type=float,
+    )
+
+    args = parser.parse_args()
+    print(args.name, args.announce_interval)
+
+    node = Node(args.name)
+    Locative(node).mainloop(
+        announce_interval=args.announce_interval, server=args.server
+    )
 
 
 if __name__ == "__main__":
