@@ -155,29 +155,35 @@ class Locative:
     def receive_reply(self, reply):
         self.node.receive_reply(reply)
 
+    def handle_input(self):
+        stdin_ready, _, _ = select.select([sys.stdin], [], [], 0.1)
+        if stdin_ready:
+            cmd = sys.stdin.readline().strip()
+
+            print("[A]nnounce or [R]equest, [L]ist or [Q]uit")
+            if cmd in ["A", "a", "ann"]:
+                self.send_announce()
+            elif cmd in ["r", "R", "req"]:
+                nid = self.ask_id()
+                if nid is not None:
+                    self.send_request(nid)
+            elif cmd in ["l", "L", "list"]:
+                self.list_transactions()
+            elif cmd in ["q", "Q", "quit"]:
+                self.die = True
+
     def mainloop(self, announce_interval=0, server=False):
         if announce_interval > 0:
             self.send_announce()
             last_ann_time = datetime.now()
             dt = timedelta(minutes=announce_interval)
 
-        print("[A]nnounce or [R]equest, [L]ist or [Q]uit")
-        while True:
-            stdin_ready, _, _ = select.select([sys.stdin], [], [], 0.1)
-            if stdin_ready:
-                cmd = sys.stdin.readline().strip()
+        if not server:
+            print("[A]nnounce or [R]equest, [L]ist or [Q]uit")
 
-                print("[A]nnounce or [R]equest, [L]ist or [Q]uit")
-                if cmd in ["A", "a", "ann"]:
-                    self.send_announce()
-                elif cmd in ["r", "R", "req"]:
-                    nid = self.ask_id()
-                    if nid is not None:
-                        self.send_request(nid)
-                elif cmd in ["l", "L", "list"]:
-                    self.list_transactions()
-                elif cmd in ["q", "Q", "quit"]:
-                    return
+        while True:
+            if not server:
+                self.handle_input()
 
             if self.die:
                 return
@@ -187,7 +193,6 @@ class Locative:
                 last_ann_time = datetime.now()
 
     def handle_signals(self, signal, frame):
-        print("SIG", flush=True)
         self.die = True
 
 
@@ -207,7 +212,7 @@ def main():
             " default announce interval 15 minutes."
         ),
         default=False,
-        type=bool,
+        action="store_true",
     )
     parser.add_argument(
         "-a",
@@ -224,7 +229,10 @@ def main():
     loc = Locative(node)
     signal.signal(signal.SIGINT, loc.handle_signals)
     signal.signal(signal.SIGTERM, loc.handle_signals)
-    loc.mainloop(announce_interval=args.announce_interval, server=args.server)
+    ann_interval = args.announce_interval
+    if ann_interval == 0 and args.server:
+        ann_interval = 15
+    loc.mainloop(announce_interval=ann_interval, server=args.server)
 
 
 if __name__ == "__main__":
