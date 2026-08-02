@@ -62,6 +62,9 @@ class Locative:
         if RNS.loglevel < RNS.LOG_INFO:
             RNS.loglevel = RNS.LOG_INFO
 
+        # poison pill
+        self.die = Event()
+
     def list_transactions(self):
         print(f"Transaction Partners:\n{self.node.chain.report()}")
 
@@ -153,7 +156,7 @@ class Locative:
     def receive_reply(self, reply):
         self.node.receive_reply(reply)
 
-    def announce_loop(self, announce_interval, die):
+    def announce_loop(self, announce_interval):
         while True:
             self.send_announce()
             total_sleep = 0
@@ -161,20 +164,18 @@ class Locative:
             while total_sleep <= announce_interval:
                 sleep(sleep_wait)
                 total_sleep += sleep_wait
-                if die.is_set():
+                if self.die.is_set():
                     return
 
     def mainloop(self, announce_interval=0, server=False):
-        die = Event()
-        die.clear()
         if announce_interval:
             announce_thread = Thread(
-                target=self.announce_loop, args=[announce_interval * 60.0, die]
+                target=self.announce_loop, args=[announce_interval * 60.0]
             )
             announce_thread.start()
 
         if server:
-            return
+            self.die.wait()
 
         while True:
             print("[A]nnounce or [R]equest, [L]ist or [Q]uit")
@@ -189,7 +190,7 @@ class Locative:
                 self.list_transactions()
 
             if cmd in ["q", "Q", "quit"]:
-                die.set()
+                self.die.set()
                 return
 
 
@@ -223,9 +224,13 @@ def main():
     print(args.name, args.announce_interval)
 
     node = Node(args.name)
-    Locative(node).mainloop(
+    loc = Locative(node)
+    signal.signal(signal.SIGINT, lambda (_, _): loc.die.set())
+    signal.signal(signal.SIGTERM, lambda (_, _): loc.die.set())
+    loc.mainloop(
         announce_interval=args.announce_interval, server=args.server
     )
+
 
 
 if __name__ == "__main__":
