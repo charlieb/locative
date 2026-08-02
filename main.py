@@ -2,11 +2,12 @@ import argparse
 import RNS
 
 from node import Node
-
-from threading import Thread, Event
-from time import sleep
+from datetime import datetime, timedelta
 
 import base64
+import select
+import signal
+import sys
 
 
 def to_str(h):
@@ -62,19 +63,17 @@ class Locative:
         if RNS.loglevel < RNS.LOG_INFO:
             RNS.loglevel = RNS.LOG_INFO
 
-        # poison pill
-        self.die = Event()
+        self.die = False
 
     def list_transactions(self):
         print(f"Transaction Partners:\n{self.node.chain.report()}")
 
     def ask_id(self):
-        ids = [
-            nid
-            for nid in self.node.chain.get_known_ids()
-            if nid != self.node.pubkey.public_bytes_raw()
-        ]
-        print("\n".join(f"[{i+1}]: {to_str(nid)}" for i, nid in enumerate(ids)))
+        print(
+            "\n".join(
+                f"[{i+1}]: {to_str(nid)}" for i, nid in enumerate(self.known_ids.keys())
+            )
+        )
         print("Please enter the number of the ID to send a request to.")
         try:
             id_idx = int(input())
@@ -82,11 +81,11 @@ class Locative:
             print("Not a valid selection: did not enter a number")
             return
 
-        if 1 > id_idx or id_idx > len(ids):
+        if 1 > id_idx or id_idx > len(self.known_ids.keys()):
             print("Not a valid selection: number not in list")
             return
 
-        return ids[id_idx - 1]
+        return list(self.known_ids.keys())[id_idx - 1]
 
     def receive_announce(self, node_id, dest_hash):
         RNS.log(f"Got announce from Node: {to_str(node_id)}")
@@ -156,42 +155,40 @@ class Locative:
     def receive_reply(self, reply):
         self.node.receive_reply(reply)
 
-    def announce_loop(self, announce_interval):
-        while True:
+    def mainloop(self, announce_interval=0, server=False):
+        if announce_interval > 0:
             self.send_announce()
-            total_sleep = 0
-            sleep_wait = 1 + (announce_interval % 1.0) / announce_interval
-            while total_sleep <= announce_interval:
-                sleep(sleep_wait)
-                total_sleep += sleep_wait
-                if self.die.is_set():
+            last_ann_time = datetime.now()
+            dt = timedelta(minutes=announce_interval)
+
+        print("[A]nnounce or [R]equest, [L]ist or [Q]uit")
+        while True:
+            stdin_ready, _, _ = select.select([sys.stdin], [], [], 0.1)
+            if stdin_ready:
+                cmd = sys.stdin.readline().strip()
+
+                print("[A]nnounce or [R]equest, [L]ist or [Q]uit")
+                if cmd in ["A", "a", "ann"]:
+                    self.send_announce()
+                elif cmd in ["r", "R", "req"]:
+                    nid = self.ask_id()
+                    if nid is not None:
+                        self.send_request(nid)
+                elif cmd in ["l", "L", "list"]:
+                    self.list_transactions()
+                elif cmd in ["q", "Q", "quit"]:
                     return
 
-    def mainloop(self, announce_interval=0, server=False):
-        if announce_interval:
-            announce_thread = Thread(
-                target=self.announce_loop, args=[announce_interval * 60.0]
-            )
-            announce_thread.start()
-
-        if server:
-            self.die.wait()
-
-        while True:
-            print("[A]nnounce or [R]equest, [L]ist or [Q]uit")
-            cmd = input()
-            if cmd in ["A", "a", "ann"]:
-                self.send_announce()
-            elif cmd in ["r", "R", "req"]:
-                nid = self.ask_id()
-                if nid is not None:
-                    self.send_request(nid)
-            elif cmd in ["l", "L", "list"]:
-                self.list_transactions()
-
-            if cmd in ["q", "Q", "quit"]:
-                self.die.set()
+            if self.die:
                 return
+
+            if announce_interval > 0 and (datetime.now() - last_ann_time) > dt:
+                self.send_announce()
+                last_ann_time = datetime.now()
+
+    def handle_signals(self, signal, frame):
+        print("SIG", flush=True)
+        self.die = True
 
 
 def main():
@@ -225,12 +222,9 @@ def main():
 
     node = Node(args.name)
     loc = Locative(node)
-    signal.signal(signal.SIGINT, lambda (_, _): loc.die.set())
-    signal.signal(signal.SIGTERM, lambda (_, _): loc.die.set())
-    loc.mainloop(
-        announce_interval=args.announce_interval, server=args.server
-    )
-
+    signal.signal(signal.SIGINT, loc.handle_signals)
+    signal.signal(signal.SIGTERM, loc.handle_signals)
+    loc.mainloop(announce_interval=args.announce_interval, server=args.server)
 
 
 if __name__ == "__main__":
