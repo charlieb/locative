@@ -133,12 +133,11 @@ class TXChain:
 
     def load(self, my_id: bytes, filename):
         self.reset()
-        sz = len(Transaction())
         with open(filename, "rb") as f:
-            while tx_bytes := f.read(sz):
-                tx = Transaction()
-                tx.from_tx_bytes(tx_bytes)
+            tx = Transaction().read_tx(f)
+            while tx:
                 self.add(my_id, tx)
+                tx = Transaction().read_tx(f)
 
     def save(self, filename):
         with open(filename, "wb") as f:

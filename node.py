@@ -127,14 +127,13 @@ class Node:
         self.pending_tx.n2_id = self.pubkey.public_bytes_raw()
         self.pending_tx.h_n2_chain = self._make_h_my_chain()
         self.pending_tx.n2_sig = self.privkey.sign(
-            self.pending_tx.to_tx_bytes(incl_sig=False)
+            self.pending_tx.to_tx_bytes(incl_reply_sig=False)
         )
         print("RCV: Adding reply to chain")
         self.chain.add(self.pubkey.public_bytes_raw(), self.pending_tx)
         self.save_chain()
         print(
             f"REQ: Chain saved: n1n2 txes: "
-            # f"{len(self.chain.t_n1n2[self.pending_tx.n1_id])}, "
             f"N1: {to_str(self.pending_tx.n1_id)} "
             f"total txes: {len(self.chain.txes)}"
         )
@@ -143,7 +142,7 @@ class Node:
         self.pending_tx_n2 = None  # probably unnecessary
         return self.chain.last().to_reply_bytes()
 
-    def make_request(self, node2_id: bytes):
+    def make_request(self, node2_id: bytes, data: bytes = b""):
         tx = Transaction()
         tx.n1_id = self.pubkey.public_bytes_raw()
 
@@ -157,6 +156,8 @@ class Node:
             print("REQ: Found no prior transactions")
 
         tx.h_n1_chain = self._make_h_my_chain()
+        tx.data_len = bytes([len(data)])
+        tx.data = data
 
         tx.n1_sig = self.privkey.sign(tx.to_request_bytes(incl_sig=False))
         self.pending_tx = tx

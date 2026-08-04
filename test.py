@@ -31,6 +31,10 @@ class TestNode(unittest.TestCase):
             os.remove("Node2_chain")
         except FileNotFoundError:
             pass
+        try:
+            os.remove("Node3_chain")
+        except FileNotFoundError:
+            pass
 
     def test_txes(self):
         node1 = Node("Node1")
@@ -187,7 +191,13 @@ class TestNode(unittest.TestCase):
 
         node1.save_chain()
         n1_chain = node1.chain.txes
+        for tx in n1_chain:
+            print(to_str(tx.to_tx_bytes())[-40:])
+
         node1.load_chain()
+        print("-------------------------")
+        for tx in node1.chain.txes:
+            print(to_str(tx.to_tx_bytes())[-40:])
 
         self.assertEqual(n1_chain, node1.chain.txes)
 
@@ -210,7 +220,13 @@ class TestNode(unittest.TestCase):
         t8 = mk_tx_between(node1, node2, drop_reply=True)
 
         # N1's chain is all the transactions that didn't get dropped
+        print(to_str(node1.chain.txes[0].to_tx_bytes()))
+        bs = node1.chain.txes[0].to_tx_bytes()
+        Transaction().from_tx_bytes(bs)
+        print(to_str(t1))
+        n1_chain = [Transaction().from_tx_bytes(tx) for tx in [t1]]
         n1_chain = [Transaction().from_tx_bytes(tx) for tx in [t1, t2, t4, t6, t7]]
+
         # N2's chain is all the transactions
         n2_chain = [
             Transaction().from_tx_bytes(tx) for tx in [t1, t2, t3, t4, t5, t6, t7, t8]
