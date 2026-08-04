@@ -5,6 +5,7 @@ from node import Node
 from datetime import datetime, timedelta
 
 import base64
+import os
 import select
 import signal
 import sys
@@ -38,11 +39,14 @@ class Locative:
         self.node = node
         self.known_ids = {}
 
-        # We must first initialise Reticulum
         self.reticulum = RNS.Reticulum()
 
-        # Randomly create a new identity for our echo server
-        self.rns_identity = RNS.Identity()
+        identity_path = "locative_identity"
+        if os.path.isfile(identity_path):
+            self.rns_identity = RNS.Identity.from_file(identity_path)
+        else:
+            self.rns_identity = RNS.Identity()
+            self.rns_identity.to_file(identity_path)
 
         # We register the announce handler with Reticulum
         RNS.Transport.register_announce_handler(
