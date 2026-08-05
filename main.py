@@ -92,7 +92,7 @@ class Locative:
         elif message[0] == ord("R"):  # Reply
             self.receive_reply(message[1:])
 
-    def send_request(self, node_id):
+    def send_request(self, node_id, data):
         if node_id not in self.known_ids:
             RNS.log(
                 f"Don't know where to send request for {to_str(node_id)}. Need announce."
@@ -112,7 +112,7 @@ class Locative:
             APP_NAME,
         )
 
-        RNS.Packet(dest, b"Q" + self.node.make_request(node_id)).send()
+        RNS.Packet(dest, b"Q" + self.node.make_request(node_id, data)).send()
         RNS.log(f"Sent locative request to {RNS.prettyhexrep(dest.hash)}")
 
     def send_reply(self):
@@ -145,7 +145,7 @@ class Locative:
             print("Please enter an optional message for the request")
             return "message"
 
-        self.send_request(self.request_id, message)
+        self.send_request(self.request_id, message.encode("utf-8"))
         return "start"
 
     def handle_id(self, state="start", nid=None):
