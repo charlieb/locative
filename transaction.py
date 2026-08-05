@@ -15,7 +15,7 @@ class Transaction:
     # Leaving 199 bytes for a variable payload data
     # 1 byte for length and the rest possibly for data
 
-    max_data_len = 198  # bytes
+    max_data_len = 188  # bytes
 
     def __init__(self):
         self.n1_id: bytes = b"\0" * 32
