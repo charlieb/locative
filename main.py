@@ -72,25 +72,6 @@ class Locative:
     def list_transactions(self):
         print(f"Transaction Partners:\n{self.node.chain.report()}")
 
-    def ask_id(self):
-        print(
-            "\n".join(
-                f"[{i+1}]: {to_str(nid)}" for i, nid in enumerate(self.known_ids.keys())
-            )
-        )
-        print("Please enter the number of the ID to send a request to.")
-        try:
-            id_idx = int(input())
-        except ValueError:
-            print("Not a valid selection: did not enter a number")
-            return
-
-        if 1 > id_idx or id_idx > len(self.known_ids.keys()):
-            print("Not a valid selection: number not in list")
-            return
-
-        return list(self.known_ids.keys())[id_idx - 1]
-
     def receive_announce(self, node_id, dest_hash):
         RNS.log(f"Got announce from Node: {to_str(node_id)}")
         # Create mapping between node_id and reticulum destination
@@ -159,22 +140,70 @@ class Locative:
     def receive_reply(self, reply):
         self.node.receive_reply(reply)
 
-    def handle_input(self):
-        stdin_ready, _, _ = select.select([sys.stdin], [], [], 0.1)
-        if stdin_ready:
-            cmd = sys.stdin.readline().strip()
+    def handle_message(self, state="start", message=None):
+        if state == "start":
+            print("Please enter an optional message for the request")
+            return "message"
 
+        self.send_request(self.request_id, message)
+        return "start"
+
+    def handle_id(self, state="start", nid=None):
+        if state == "start":
+            print(
+                "\n".join(
+                    f"[{i+1}]: {to_str(nid)}"
+                    for i, nid in enumerate(self.known_ids.keys())
+                )
+            )
+            print("Please enter the number of the ID to send a request to.")
+            return "id"
+
+        try:
+            id_idx = int(nid)
+        except ValueError:
+            print("Not a valid selection: did not enter a number")
+            return
+
+        if 1 > id_idx or id_idx > len(self.known_ids.keys()):
+            print("Not a valid selection: number not in list")
+            return
+
+        self.request_id = list(self.known_ids.keys())[id_idx - 1]
+        return self.handle_message()
+
+    def handle_cmd(self, state="start", cmd=None):
+        if state == "start":
             print("[A]nnounce or [R]equest, [L]ist or [Q]uit")
-            if cmd in ["A", "a", "ann"]:
-                self.send_announce()
-            elif cmd in ["r", "R", "req"]:
-                nid = self.ask_id()
-                if nid is not None:
-                    self.send_request(nid)
-            elif cmd in ["l", "L", "list"]:
-                self.list_transactions()
-            elif cmd in ["q", "Q", "quit"]:
-                self.die = True
+            return "cmd"
+
+        if cmd in ["A", "a", "ann"]:
+            self.send_announce()
+            return "start"
+        elif cmd in ["r", "R", "req"]:
+            return self.handle_id()
+        elif cmd in ["l", "L", "list"]:
+            self.list_transactions()
+            return "start"
+        elif cmd in ["q", "Q", "quit"]:
+            self.die = True
+
+    def handle_input(self, state="start"):
+        stdin_ready, _, _ = select.select([sys.stdin], [], [], 0.1)
+        if stdin_ready or state == "start":
+            if state == "start":
+                return self.handle_cmd()
+
+            user_input = sys.stdin.readline().strip()
+
+            if state.startswith("cmd"):
+                state = self.handle_cmd(state, user_input)
+            elif state.startswith("id"):
+                state = self.handle_id(state, user_input)
+            elif state.startswith("message"):
+                state = self.handle_message(state, user_input)
+
+        return state
 
     def mainloop(self, announce_interval=0, server=False):
         if announce_interval > 0:
@@ -182,12 +211,12 @@ class Locative:
             last_ann_time = datetime.now()
             dt = timedelta(minutes=announce_interval)
 
-        if not server:
-            print("[A]nnounce or [R]equest, [L]ist or [Q]uit")
-
+        state = None
         while True:
             if not server:
-                self.handle_input()
+                if state is None:
+                    state = "start"
+                state = self.handle_input(state)
 
             if self.die:
                 return
