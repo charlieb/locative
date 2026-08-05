@@ -156,9 +156,14 @@ class Node:
             print("REQ: Found no prior transactions")
 
         tx.h_n1_chain = self._make_h_my_chain()
-        tx.data_len = bytes([len(data)])
-        tx.data = data
 
+        if len(data) > tx.max_data_len:
+            print(f"REQ: Data too long, truncated to {tx.max_data_len}")
+            tx.data = data[: tx.max_data_len]
+        else:
+            tx.data = data
+
+        tx.data_len = bytes([len(tx.data)])
         tx.n1_sig = self.privkey.sign(tx.to_request_bytes(incl_sig=False))
         self.pending_tx = tx
         self.pending_tx_n2 = node2_id

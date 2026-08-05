@@ -11,8 +11,8 @@ def to_str(h):
     return base64.b64encode(h).decode("utf-8")
 
 
-def mk_tx_between(node1, node2, drop_reply=False):
-    req = node1.make_request(node2.pubkey.public_bytes_raw())
+def mk_tx_between(node1, node2, drop_reply=False, data: bytes = b""):
+    req = node1.make_request(node2.pubkey.public_bytes_raw(), data=data)
     node2.receive_request(req)
     rep = node2.make_reply()
     if not drop_reply:
@@ -275,6 +275,20 @@ class TestNode(unittest.TestCase):
             print(to_str(tx.n2_sig))
 
         self.assertEqual(node1.chain.t_n1n2[n1n2], node2.chain.t_n1n2[n1n2][:-1])
+
+    def test_data_segment(self):
+        node1 = Node("Node1")
+        node2 = Node("Node2")
+
+        node1.chain.reset()
+        node2.chain.reset()
+
+        mk_tx_between(node1, node2, data=b"Hello World")
+        self.assertEqual(node2.chain.last().data, b"Hello World")
+
+        # Test truncation
+        mk_tx_between(node1, node2, data=b"1234567890" * 20)
+        self.assertEqual(node2.chain.last().data, b"1234567890" * 19 + b"12345678")
 
 
 if __name__ == "__main__":
