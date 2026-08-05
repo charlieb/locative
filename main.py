@@ -3,6 +3,7 @@ import RNS
 
 from node import Node
 from datetime import datetime, timedelta
+from time import sleep
 
 import base64
 import os
@@ -224,6 +225,8 @@ class Locative:
             if announce_interval > 0 and (datetime.now() - last_ann_time) > dt:
                 self.send_announce()
                 last_ann_time = datetime.now()
+                if server:
+                    sleep(announce_interval)
 
     def handle_signals(self, signal, frame):
         self.die = True

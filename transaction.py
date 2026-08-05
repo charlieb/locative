@@ -14,8 +14,9 @@ class Transaction:
     # Reticulum packet size (- header) is 477
     # Leaving 199 bytes for a variable payload data
     # 1 byte for length and the rest possibly for data
+    # 1 byte is used for dispatching messages in the reticulum client layer
 
-    max_data_len = 188  # bytes
+    max_data_len = 187  # bytes
 
     def __init__(self):
         self.n1_id: bytes = b"\0" * 32

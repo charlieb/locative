@@ -289,9 +289,9 @@ class TestNode(unittest.TestCase):
 
         # Test truncation
         mk_tx_between(node1, node2, data=b"1234567890" * 20)
-        self.assertEqual(node2.chain.last().data, b"1234567890" * 18 + b"12345678")
+        self.assertEqual(node2.chain.last().data, b"1234567890" * 18 + b"1234567")
         # Ensure a full transaction still fits in a single reticulum packet
-        self.assertEqual(len(node2.chain.last().to_tx_bytes()), 477)
+        self.assertEqual(len(node2.chain.last().to_tx_bytes()), 476)
 
 
 if __name__ == "__main__":
