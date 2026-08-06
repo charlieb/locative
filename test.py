@@ -11,10 +11,12 @@ def to_str(h):
     return base64.b64encode(h).decode("utf-8")
 
 
-def mk_tx_between(node1, node2, drop_reply=False, data: bytes = b""):
-    req = node1.make_request(node2.pubkey.public_bytes_raw(), data=data)
+def mk_tx_between(
+    node1, node2, drop_reply=False, n1_data: bytes = b"", n2_data: bytes = b""
+):
+    req = node1.make_request(node2.pubkey.public_bytes_raw(), data=n1_data)
     node2.receive_request(req)
-    rep = node2.make_reply()
+    rep = node2.make_reply(data=n2_data)
     if not drop_reply:
         node1.receive_reply(rep)
     return req + rep
@@ -283,15 +285,20 @@ class TestNode(unittest.TestCase):
         node1.chain.reset()
         node2.chain.reset()
 
-        mk_tx_between(node1, node2, data=b"Hello World")
-        self.assertEqual(node2.chain.last().data, b"Hello World")
-        self.assertEqual(len(node2.chain.last().data), len(b"Hello World"))
+        mk_tx_between(node1, node2, n1_data=b"Hello World", n2_data=b"Hello Back")
+        self.assertEqual(node2.chain.last().n1_data, b"Hello World")
+        self.assertEqual(node1.chain.last().n2_data, b"Hello Back")
+        self.assertEqual(len(node2.chain.last().n1_data), len(b"Hello World"))
+        self.assertEqual(len(node1.chain.last().n2_data), len(b"Hello Back"))
 
-        # Test truncation
-        mk_tx_between(node1, node2, data=b"1234567890" * 20)
-        self.assertEqual(node2.chain.last().data, b"1234567890" * 18 + b"1234567")
+        # Test truncation - max is 90 bytes for both request and reply
+        mk_tx_between(
+            node1, node2, n1_data=b"1234567890" * 10, n2_data=b"0987654321" * 10
+        )
+        self.assertEqual(node2.chain.last().n1_data, b"1234567890" * 9)
+        self.assertEqual(node1.chain.last().n2_data, b"0987654321" * 9)
         # Ensure a full transaction still fits in a single reticulum packet
-        self.assertEqual(len(node2.chain.last().to_tx_bytes()), 476)
+        self.assertLessEqual(len(node2.chain.last().to_tx_bytes()), 476)
 
 
 if __name__ == "__main__":

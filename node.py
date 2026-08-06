@@ -120,12 +120,21 @@ class Node:
         else:
             return b"\0" * 32
 
-    def make_reply(self):
+    def make_reply(self, data: bytes = b""):
         if not self.pending_tx:
             return
 
         self.pending_tx.n2_id = self.pubkey.public_bytes_raw()
         self.pending_tx.h_n2_chain = self._make_h_my_chain()
+
+        if len(data) > Transaction.max_data_len:
+            print(f"REQ: Data too long, truncated to {Transaction.max_data_len}")
+            self.pending_tx.n2_data = data[: Transaction.max_data_len]
+        else:
+            self.pending_tx.n2_data = data
+
+        self.pending_tx.n2_data_len = bytes([len(self.pending_tx.n2_data)])
+
         self.pending_tx.n2_sig = self.privkey.sign(
             self.pending_tx.to_tx_bytes(incl_reply_sig=False)
         )
@@ -159,11 +168,11 @@ class Node:
 
         if len(data) > tx.max_data_len:
             print(f"REQ: Data too long, truncated to {tx.max_data_len}")
-            tx.data = data[: tx.max_data_len]
+            tx.n1_data = data[: tx.max_data_len]
         else:
-            tx.data = data
+            tx.n1_data = data
 
-        tx.data_len = bytes([len(tx.data)])
+        tx.n1_data_len = bytes([len(tx.n1_data)])
         tx.n1_sig = self.privkey.sign(tx.to_request_bytes(incl_sig=False))
         self.pending_tx = tx
         self.pending_tx_n2 = node2_id

@@ -30,7 +30,7 @@ class TXChain:
             halfway = len(n1n2_id) // 2
             res += f"{to_str(n1n2_id[:halfway])} -> {to_str(n1n2_id[halfway:])} : {len(txes)} txes\n"
             for tx in txes:
-                res += f"\tMessage: {tx.data}\n"
+                res += f"\tMessage: {tx.n1_data} <- {tx.n2_data}\n"
         return res
 
     def last(self):
